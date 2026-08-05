@@ -3,3 +3,7 @@ accelerate
 transformers>=5.5.0
 huggingface_hub>=0.37
 peft
+# transformers 5.x requires safetensors>=0.8.0 at import time, but the vllm
+# layer installs 0.7.0 and this file is installed with --no-deps, so the
+# upgrade must be requested explicitly or the server crash-loops on startup.
+safetensors>=0.8.0
