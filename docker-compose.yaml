@@ -2,6 +2,11 @@ services:
 
     cray: &cray
         command: /app/cray/scripts/start_one_server.sh
+        # Multi-rank training needs real shared memory: OpenMPI's vader BTL
+        # allocates per-pair segments and gpu_aware_mpi opens 256MB shm
+        # channels per rank pair. Docker's 64MB default overflows immediately
+        # and ranks die with SIGBUS on the mmap'd segment.
+        shm_size: "16gb"
         build:
             context: .
             dockerfile: Dockerfile
