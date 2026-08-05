@@ -67,6 +67,19 @@ def apply_distribution_strategy(model_info):
 def select_gpu():
     rank = get_rank()
     gpu_count = torch.cuda.device_count()
+
+    # Co-located ranks (single node, mpirun) all share one hostname, so the
+    # hostname-position scan below assigns every rank GPU 0. The MPI local
+    # rank is the authoritative per-node index when it is available.
+    local_rank = os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK")
+    if local_rank is not None and gpu_count > 0:
+        gpu_index = int(local_rank) % gpu_count
+        logger.info(
+            f"Rank {rank} assigned GPU {gpu_index} of {gpu_count} "
+            f"via OMPI local rank {local_rank}."
+        )
+        return gpu_index
+
     machine_id = get_machine_id()
     my_hostname = socket.gethostname()
 
