@@ -30,9 +30,20 @@ export PYTHONPATH="${LOCAL_DIRECTORY}/ml:${PYTHONPATH:-}"
 # No-op on deployments without nvidia-smi (CPU, ROCm).
 if command -v nvidia-smi >/dev/null 2>&1; then
     NGPUS=$(python -c "import yaml; print(yaml.safe_load(open('${CRAY_TRAINING_JOB_CONFIG_PATH}')).get('gpus', 1))")
-    CUDA_VISIBLE_DEVICES=$(nvidia-smi --query-gpu=index,memory.free --format=csv,noheader,nounits | sort -t, -k2 -rn | head -"${NGPUS}" | cut -d, -f1 | paste -sd,)
-    export CUDA_VISIBLE_DEVICES
-    echo "Selected CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES} (freest ${NGPUS} GPUs)"
+    GPU_PICK=$(nvidia-smi --query-gpu=index,memory.free --format=csv,noheader,nounits 2>/dev/null | sort -t, -k2 -rn | head -"${NGPUS}" | cut -d, -f1 | paste -sd, || true)
+    # Only trust a comma-separated list of indices — nvidia-smi can emit
+    # "Failed to initialize NVML: Unknown Error" on stdout (e.g. after the
+    # host revokes container device access on a systemd reload), and
+    # exporting that as CUDA_VISIBLE_DEVICES crashes the job.
+    case "${GPU_PICK}" in
+        *[!0-9,]*|"")
+            echo "GPU auto-select skipped (nvidia-smi output unusable: ${GPU_PICK})"
+            ;;
+        *)
+            export CUDA_VISIBLE_DEVICES="${GPU_PICK}"
+            echo "Selected CUDA_VISIBLE_DEVICES=${GPU_PICK} (freest ${NGPUS} GPUs)"
+            ;;
+    esac
 fi
 
 exec mpirun --allow-run-as-root python "${LOCAL_DIRECTORY}/ml/cray_megatron/main.py" "$@"
