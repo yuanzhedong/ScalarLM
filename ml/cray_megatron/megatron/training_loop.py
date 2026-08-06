@@ -446,6 +446,12 @@ class TrainingLoop:
             "labels": batch["labels"].to(device),
         }
 
+        # Multimodal batches (training_mode "vlm") carry image tensors; pass
+        # them through so the vision tower runs. Text batches lack these keys.
+        for optional_key in ("pixel_values", "image_grid_thw"):
+            if optional_key in batch:
+                forward_kwargs[optional_key] = batch[optional_key].to(device)
+
         # If the packed batch carries document_ids, replace the 1-D
         # attention_mask with a 4-D block-diagonal+causal additive mask
         # so packed documents don't attend across each other. The 1-D

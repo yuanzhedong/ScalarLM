@@ -206,6 +206,8 @@ async def _upload_chunk_with_retry(chunk_url, upload_id, chunk_index, chunk_data
 
 @contextlib.contextmanager
 def make_training_archive(data):
+    data, image_files = extract_image_references(data)
+
     with make_data_file(data) as data_file_path:
         check_for_zero_length_file(data_file_path)
 
@@ -219,6 +221,15 @@ def make_training_archive(data):
                     arcname="dataset.jsonlines",
                     filter=tar_info_strip_file_info,
                 )
+
+                # VLM examples reference local image files; ship them in the
+                # archive under images/ and the examples point at those
+                # relative paths (the server extracts the tar into the job
+                # directory, where the vlm loader resolves them).
+                for local_path, arcname in image_files:
+                    tar.add(
+                        local_path, arcname=arcname, filter=tar_info_strip_file_info
+                    )
 
                 ml_dir = find_ml_dir()
                 if ml_dir is None:
@@ -255,6 +266,37 @@ def find_ml_dir():
     )
     if os.path.exists(peer_directory):
         return peer_directory
+
+
+def extract_image_references(data):
+    """Rewrite examples' local image paths to archive-relative paths.
+
+    Only applies to list-of-dict data where an item has an "images" list of
+    existing local files. Returns (possibly rewritten data, [(local, arcname)]).
+    Deduplicates identical source files. Non-list data passes through.
+    """
+    if not isinstance(data, list):
+        return data, []
+
+    image_files = []
+    seen = {}
+    rewritten = []
+    for item in data:
+        images = item.get("images") if isinstance(item, dict) else None
+        if not images:
+            rewritten.append(item)
+            continue
+        new_paths = []
+        for path in images:
+            abs_path = os.path.abspath(path)
+            if abs_path not in seen:
+                arcname = f"images/{len(seen):06d}_{os.path.basename(abs_path)}"
+                seen[abs_path] = arcname
+                image_files.append((abs_path, arcname))
+            new_paths.append(seen[abs_path])
+        rewritten.append({**item, "images": new_paths})
+
+    return rewritten, image_files
 
 
 @contextlib.contextmanager

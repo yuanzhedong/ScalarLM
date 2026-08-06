@@ -25,7 +25,7 @@ class DataLoader:
         )
 
         self.loader = torch.utils.data.DataLoader(
-            self.dataset, batch_size=self.batch_size
+            self.dataset, batch_size=self.batch_size, collate_fn=get_collate_fn(tokenizer)
         )
 
     def __iter__(self):
@@ -43,7 +43,7 @@ class DataLoader:
                 epoch=self.epoch,
             )
             self.loader = torch.utils.data.DataLoader(
-                self.dataset, batch_size=self.batch_size
+                self.dataset, batch_size=self.batch_size, collate_fn=get_collate_fn(self.tokenizer)
             )
             self.iterator = iter(self.loader)
 
@@ -53,3 +53,17 @@ class DataLoader:
 def get_batch_size():
     job_config = get_job_config()
     return job_config["batch_size"]
+
+
+def get_collate_fn(tokenizer):
+    """VLM mode pads variable-length rows and carries pixel tensors; the
+    text/embedding modes keep torch's default collate (packed rows are
+    already uniform)."""
+    job_config = get_job_config()
+    if job_config["training_mode"] == "vlm":
+        from cray_megatron.megatron.dataset.load_vlm_dataset import (
+            make_vlm_collate_function,
+        )
+
+        return make_vlm_collate_function(tokenizer)
+    return None

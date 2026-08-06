@@ -50,7 +50,7 @@ class JobConfig(BaseModel):
 
     max_token_block_size: int = 16777216 # 16 mega tokens
 
-    training_mode: str = "language_model"  # or "embedding"
+    training_mode: str = "language_model"  # or "embedding" or "vlm" (image+text)
 
     # Distribution strategy
     distribution_strategy: str = "fsdp"
