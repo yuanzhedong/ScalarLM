@@ -10,6 +10,11 @@ from cray_megatron.models.get_latest_checkpoint_path import (
 from cray_megatron.collectives.main_rank_only import main_rank_only, is_main_rank
 from cray_megatron.megatron.training_harness import TrainingHarness
 from cray_megatron.megatron import stop_flag
+from cray_megatron.megatron.wandb_hook import (
+    wandb_init,
+    wandb_log,
+    wandb_finish,
+)
 from cray_megatron.megatron.doc_mask import (
     doc_mask_decision,
     is_multimodal,
@@ -201,7 +206,12 @@ class TrainingLoop:
 
         self.training_state.model_info = self.model_manager.load_model()
 
-        self.training_loop()
+        wandb_init(get_job_config())
+
+        try:
+            self.training_loop()
+        finally:
+            wandb_finish()
 
         self.checkpoint()
 
@@ -356,6 +366,17 @@ class TrainingLoop:
             # Print training step info with averaged loss
             step_time = time.time() - step_start_time
             self.print_training_step_info(avg_accumulated_loss, step_time)
+
+            wandb_log(
+                {
+                    "train/loss": avg_accumulated_loss,
+                    "train/epoch": self.training_state.epoch,
+                    "train/learning_rate": self.training_state.optimizer.param_groups[0]["lr"],
+                    "train/step_time_s": step_time,
+                    "train/global_step": step,
+                },
+                step=step,
+            )
 
             self.on_step_end(step)
 
