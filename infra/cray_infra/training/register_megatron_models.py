@@ -44,9 +44,12 @@ async def get_models():
     for path in os.listdir(config["training_job_directory"]):
         root = os.path.join(config["training_job_directory"], path)
         logger.info(f"Checking {root}")
-        # Look for any file matching *.pt* in this directory
+        # Look for adapter weights in this directory: ScalarLM .pt
+        # checkpoints or an HF PEFT export (the serving-side loader
+        # supports both; PEFT is the preferred serving format).
         pt_files = list(Path(root).glob("*.pt"))
-        if not pt_files:
+        peft_files = list(Path(root).glob("adapter_model.safetensors"))
+        if not pt_files and not peft_files:
             continue
         # Only register adapters trained for the model this server is serving.
         # The serve worker loads every registered adapter onto the single served
