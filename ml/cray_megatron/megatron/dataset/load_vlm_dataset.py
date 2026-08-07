@@ -63,8 +63,10 @@ def load_vlm_dataset(model, tokenizer, epoch):
             }
         ),
     )
-    shuffled_dataset = hf_dataset.shuffle(seed=42 + epoch, buffer_size=256)
-    split_dataset = split_dataset_by_node(shuffled_dataset)
+    job_config = get_job_config()
+    if job_config.get("shuffle_training_data", True):
+        hf_dataset = hf_dataset.shuffle(seed=42 + epoch, buffer_size=256)
+    split_dataset = split_dataset_by_node(hf_dataset)
 
     processed = split_dataset.map(
         get_process_function(model, tokenizer),
