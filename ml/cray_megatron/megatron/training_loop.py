@@ -373,6 +373,7 @@ class TrainingLoop:
                     "train/epoch": self.training_state.epoch,
                     "train/learning_rate": self.training_state.optimizer.param_groups[0]["lr"],
                     "train/step_time_s": step_time,
+                    "train/global_step": step,
                 },
                 step=step,
             )
