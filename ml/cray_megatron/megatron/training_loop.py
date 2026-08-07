@@ -446,6 +446,12 @@ class TrainingLoop:
             "labels": batch["labels"].to(device),
         }
 
+        # Multimodal batches (training_mode "vlm") carry image tensors; pass
+        # them through so the vision tower runs. Text batches lack these keys.
+        for optional_key in ("pixel_values", "image_grid_thw"):
+            if optional_key in batch:
+                forward_kwargs[optional_key] = batch[optional_key].to(device)
+
         # If the packed batch carries document_ids, replace the 1-D
         # attention_mask with a 4-D block-diagonal+causal additive mask
         # so packed documents don't attend across each other. The 1-D
@@ -590,6 +596,37 @@ class TrainingLoop:
             model_state_dict = filter_checkpoint(model.model, model.model.state_dict())
 
         self.save_checkpoint(model_state_dict)
+        self.export_peft_adapter()
+
+    @main_rank_only
+    def export_peft_adapter(self):
+        """Export the LoRA adapter in standard HF PEFT format
+        (adapter_config.json + adapter_model.safetensors) into the job
+        directory alongside the .pt training checkpoint.
+
+        The serving side loads PEFT-format adapters through vLLM's
+        upstream, well-tested loader; the custom .pt translation is
+        architecture-sensitive (SmolVLM adapters silently no-op'd
+        through it while scoring correctly in-process). The .pt remains
+        the resume/source-of-truth checkpoint; this is the serving
+        artifact."""
+        job_config = get_job_config()
+        if job_config.get("adapter_type") != "lora":
+            return
+        inner = self.training_state.model_info["model"]
+        for _ in range(4):
+            if hasattr(inner, "save_pretrained"):
+                break
+            inner = getattr(inner, "module", None) or getattr(inner, "model", inner)
+        if not hasattr(inner, "save_pretrained"):
+            logger.warning(
+                "PEFT adapter export skipped: could not find save_pretrained "
+                "on the wrapped model"
+            )
+            return
+        out_dir = job_config["job_directory"]
+        inner.save_pretrained(out_dir)
+        logger.info(f"Exported PEFT-format adapter to {out_dir}")
 
     @main_rank_only
     def save_checkpoint(self, model_state_dict):

@@ -485,25 +485,30 @@ async def async_chat_completion_task(request, app):
 def convert_prompt_to_openai_format(
     prompt: PromptType,
 ) -> list[ChatCompletionMessageParam]:
-    """Convert a prompt to OpenAI format."""
+    """Convert a prompt to OpenAI format.
+
+    Content-part order matters: the chat template renders parts in
+    sequence, and the training pipeline (load_vlm_dataset) places image
+    placeholders BEFORE the text. Emitting text first here produces a
+    "text<image>" prompt against adapters trained on "<image>text" — a
+    train/serve skew that measurably degrades multimodal adapters, and
+    degrades harder with more images.
+    """
     if isinstance(prompt, str):
-        return [{"role": "user", "content": [{"role": "user", "content": prompt}]}]
+        return [{"role": "user", "content": prompt}]
     elif isinstance(prompt, dict):
-        list_of_content = []
-        for key, value in prompt.items():
-            if key == "text":
-                list_of_content.append({"type": "text", "text": value})
-            elif key == "images":
-                list_of_content.extend(
-                    [
-                        {"type": "image_url", "image_url": {"url": image}}
-                        for image in value
-                    ]
-                )
-            else:
-                raise ValueError(
-                    f"Invalid prompt sub-field: {key}. Must be 'text' or 'image'."
-                )
+        unknown = set(prompt) - {"text", "images"}
+        if unknown:
+            raise ValueError(
+                f"Invalid prompt sub-fields: {sorted(unknown)}. "
+                "Must be 'text' or 'images'."
+            )
+        list_of_content = [
+            {"type": "image_url", "image_url": {"url": image}}
+            for image in prompt.get("images", [])
+        ]
+        if "text" in prompt:
+            list_of_content.append({"type": "text", "text": prompt["text"]})
         return [{"role": "user", "content": list_of_content}]
     else:
         raise ValueError(f"Invalid prompt type: {type(prompt)}")

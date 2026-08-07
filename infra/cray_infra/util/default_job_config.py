@@ -50,7 +50,12 @@ class JobConfig(BaseModel):
 
     max_token_block_size: int = 16777216 # 16 mega tokens
 
-    training_mode: str = "language_model"  # or "embedding"
+    training_mode: str = "language_model"  # or "embedding" or "vlm" (image+text)
+
+    # False disables the streaming shuffle so examples are consumed in
+    # dataset-file order. For deterministic replay / pipeline A-B runs
+    # where two trainers must see the identical example sequence.
+    shuffle_training_data: bool = True
 
     # Distribution strategy
     distribution_strategy: str = "fsdp"

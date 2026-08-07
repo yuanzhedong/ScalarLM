@@ -27,7 +27,7 @@ from cray_infra.api.fastapi.chat_completions.render_chat_template import (
 )
 
 
-def render_generate_entry(entry: Any, *, model: str) -> str:
+def render_generate_entry(entry: Any, *, model: str) -> Any:
     if isinstance(entry, str):
         return entry
 
@@ -39,6 +39,20 @@ def render_generate_entry(entry: Any, *, model: str) -> str:
                 f"`prompt` or `messages`; got {type(entry).__name__}"
             ),
         )
+
+    # Image-bearing entry: {"text": str, "images": [url_or_data_url, ...]}.
+    # Passed through the queue as a structured payload instead of a rendered
+    # string — the generate worker turns it into OpenAI-format messages and
+    # vLLM's chat path applies the model's template (and image processing)
+    # exactly once. Rendering here would strip the pixels.
+    if entry.get("images"):
+        text = entry.get("text") or entry.get("prompt")
+        if not text:
+            raise HTTPException(
+                status_code=400,
+                detail="prompts entries with `images` must also carry `text`",
+            )
+        return {"text": text, "images": entry["images"]}
 
     try:
         return render_chat_template(

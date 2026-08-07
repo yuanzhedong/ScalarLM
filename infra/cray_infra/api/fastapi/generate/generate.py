@@ -25,6 +25,7 @@ from fastapi import HTTPException
 import json
 import traceback
 import hashlib
+import time
 
 import logging
 
@@ -147,7 +148,17 @@ def truncate_string(s):
     else:
         return s
 
+# Salt the content-addressed cache with the server session (process start).
+# Without it, identical requests replay disk-cached responses FOREVER —
+# across restarts, adapter re-registrations, and engine-state changes —
+# including cached failures. One stale early measurement replayed for days
+# masqueraded as a reproducible "continuous batching degradation" until the
+# cache was purged; salting scopes dedup to the session that produced it.
+_SERVER_SESSION_SALT = str(time.time())
+
+
 def get_contents_hash(requests) -> hashlib._hashlib.HASH:
     sha256 = hashlib.sha256()
+    sha256.update(_SERVER_SESSION_SALT.encode("utf-8"))
     sha256.update(json.dumps(requests).encode("utf-8"))
     return sha256
