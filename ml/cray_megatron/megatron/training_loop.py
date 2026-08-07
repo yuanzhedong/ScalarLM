@@ -596,6 +596,37 @@ class TrainingLoop:
             model_state_dict = filter_checkpoint(model.model, model.model.state_dict())
 
         self.save_checkpoint(model_state_dict)
+        self.export_peft_adapter()
+
+    @main_rank_only
+    def export_peft_adapter(self):
+        """Export the LoRA adapter in standard HF PEFT format
+        (adapter_config.json + adapter_model.safetensors) into the job
+        directory alongside the .pt training checkpoint.
+
+        The serving side loads PEFT-format adapters through vLLM's
+        upstream, well-tested loader; the custom .pt translation is
+        architecture-sensitive (SmolVLM adapters silently no-op'd
+        through it while scoring correctly in-process). The .pt remains
+        the resume/source-of-truth checkpoint; this is the serving
+        artifact."""
+        job_config = get_job_config()
+        if job_config.get("adapter_type") != "lora":
+            return
+        inner = self.training_state.model_info["model"]
+        for _ in range(4):
+            if hasattr(inner, "save_pretrained"):
+                break
+            inner = getattr(inner, "module", None) or getattr(inner, "model", inner)
+        if not hasattr(inner, "save_pretrained"):
+            logger.warning(
+                "PEFT adapter export skipped: could not find save_pretrained "
+                "on the wrapped model"
+            )
+            return
+        out_dir = job_config["job_directory"]
+        inner.save_pretrained(out_dir)
+        logger.info(f"Exported PEFT-format adapter to {out_dir}")
 
     @main_rank_only
     def save_checkpoint(self, model_state_dict):

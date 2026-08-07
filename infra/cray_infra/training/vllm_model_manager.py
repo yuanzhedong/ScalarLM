@@ -60,9 +60,11 @@ class VLLMModelManager:
         model_path = os.path.join(training_dir, model_name)
 
         if os.path.exists(model_path):
-            # Verify it has model files (like .pt files)
+            # Verify it has model files: ScalarLM .pt checkpoints or an
+            # HF PEFT adapter (the serving-side loader supports both).
             pt_files = list(Path(model_path).glob("*.pt"))
-            if len(pt_files) > 0:
+            peft_files = list(Path(model_path).glob("adapter_model.safetensors"))
+            if len(pt_files) > 0 or len(peft_files) > 0:
                 # Auto-register the discovered model
                 self.register_model(model_name)
                 return model_name
