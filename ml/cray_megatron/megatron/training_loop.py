@@ -369,10 +369,10 @@ class TrainingLoop:
 
             wandb_log(
                 {
-                    "loss": avg_accumulated_loss,
-                    "epoch": self.training_state.epoch,
-                    "lr": self.training_state.optimizer.param_groups[0]["lr"],
-                    "step_time_s": step_time,
+                    "train/loss": avg_accumulated_loss,
+                    "train/epoch": self.training_state.epoch,
+                    "train/learning_rate": self.training_state.optimizer.param_groups[0]["lr"],
+                    "train/step_time_s": step_time,
                 },
                 step=step,
             )
